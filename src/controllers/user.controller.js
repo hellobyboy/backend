@@ -4,8 +4,9 @@ import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import jwt from "jsonwebtoken";
 
-const generateAccessAndRefreshToken = async( userID ) =>{
+const generateAccessAndRefreshToken = async (userID) => {
     try {
         const user = await User.findById(userID)
         const accessToken = user.generateAccessToken()
@@ -14,7 +15,7 @@ const generateAccessAndRefreshToken = async( userID ) =>{
         user.refreshToken = refreshToken
         await user.save({ validateBeforeSave: false })
 
-        return {accessToken, refreshToken}
+        return { accessToken, refreshToken }
 
     } catch (error) {
         throw new ApiError(500, "Something went wrong while generating Access and Refresh tokens")
@@ -38,53 +39,53 @@ const registerUser = asyncHandler(async (req, res) => {
     // 9. return response(res)
 
     //✔️1
-    const {fullName, email, username, password} = req.body
+    const { fullName, email, username, password } = req.body
     // console.log("Email: ", email);
     // console.log("password: ", password);
-    
+
     // if(fullName === ""){
     //     throw new ApiError(400, "Full Name is required")
     // }
 
     //✔️2
     if (
-        [fullName, email, username, password].some((field) => field?.trim() === "" )
-    ){
+        [fullName, email, username, password].some((field) => field?.trim() === "")
+    ) {
         throw new ApiError(400, "All fields are required")
     }
 
     //✔️3
     const existedUser = await User.findOne({
-        $or: [{ username },{ email}]
+        $or: [{ username }, { email }]
     })
 
-    if(existedUser){
+    if (existedUser) {
         throw new ApiError(409, "User with email or username already exists")
     }
 
     //✔️4
     // console.log("Files: ", req.files);
-    
+
     const avatarLocalPath = req.files?.avatar[0]?.path;
     // const coverImageLocalPath = req.files?.coverImage[0]?.path;
 
     let coverImageLocalPath;
-    if(req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length > 0){
+    if (req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length > 0) {
         coverImageLocalPath = req.files.coverImage[0].path
     }
 
     // console.log("Avatar Path: ", avatarLocalPath);
     // console.log("Cover Image Path: ", coverImageLocalPath);
 
-    if (!avatarLocalPath){
+    if (!avatarLocalPath) {
         throw new ApiError(400, "Avatar is required")
     }
 
     //✔️5
     const avatar = await uploadOnCloudinary(avatarLocalPath)
     const coverImage = await uploadOnCloudinary(coverImageLocalPath)
-    
-    if (!avatar){
+
+    if (!avatar) {
         throw new ApiError(400, "Avatar is required")
     }
 
@@ -92,7 +93,7 @@ const registerUser = asyncHandler(async (req, res) => {
     const user = await User.create({
         fullName,
         avatar: avatar.url,
-        coverImage: coverImage?.url  || "",
+        coverImage: coverImage?.url || "",
         email,
         password,
         username: username.toLowerCase()
@@ -104,7 +105,7 @@ const registerUser = asyncHandler(async (req, res) => {
     )
 
     //✔️8
-    if(!createdUser){
+    if (!createdUser) {
         throw new ApiError(500, "something went wrong whil registring the user")
     }
 
@@ -114,10 +115,8 @@ const registerUser = asyncHandler(async (req, res) => {
     )
 })
 
-
-
 const loginUser = asyncHandler(async (req, res) => {
-    
+
     // logic building | login controller
     // req body -> data
     // username or email
@@ -139,24 +138,32 @@ const loginUser = asyncHandler(async (req, res) => {
      */
 
 
-    const {email, username, password} = req.body
-    if(!email || !username){
+    const { email, username, password } = req.body
+    console.log(email);
+
+    if (!email && !username) {
         throw new ApiError(400, "Email or Username is required")
     }
 
+    // Here is an alternative of above code based on logic discussed in video:
+    // if (!(username || email)) {
+    //     throw new ApiError(400, "username or email is required")
+        
+    // }
+
     const user = await User.findOne({
-        $or: [{email}, {username}]
+        $or: [{ email }, { username }]
     })
-    if(!user){
+    if (!user) {
         throw new ApiError(404, "User not found")
     }
 
     const isPasswordValid = await user.isPasswordCorrect(password)
-    if(!isPasswordValid){
+    if (!isPasswordValid) {
         throw new ApiError(401, "Invalid password")
     }
 
-    const {accessToken, refreshToken} = await generateAccessAndRefreshToken(user._id)
+    const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id)
 
     const loggedInUser = await User.findById(user._id).select("-password -refreshToken")
 
@@ -166,19 +173,19 @@ const loginUser = asyncHandler(async (req, res) => {
     }
 
     return res.status(200)
-    .cookie("accessToken", accessToken, options)
-    .cookie("refreshToken", refreshToken, options)
-    .json(
-        new ApiResponse(
-            200, 
-            {
-                user: loggedInUser,
-                accessToken,
-                refreshToken
-            },
-            "User logged in successfully"
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
+        .json(
+            new ApiResponse(
+                200,
+                {
+                    user: loggedInUser,
+                    accessToken,
+                    refreshToken
+                },
+                "User logged in successfully"
+            )
         )
-    )
 })
 
 const logoutUser = asyncHandler(async (req, res) => {
@@ -189,32 +196,76 @@ const logoutUser = asyncHandler(async (req, res) => {
     // 3. return response(res)
 
     User.findByIdAndUpdate(
-        await req.user._id, {
+        await req.user._id, 
+        {
             $set: {
                 refreshToken: undefined
-            },
-            {
-                new: true
             }
+        }, 
+        {
+            new: true
         }
-    ) 
-    
+    )
+
     const options = {
         httpOnly: true,
         secure: true
     }
 
     return res
-    .status(200)
-    .clearCookie("accessToken", options)
-    .clearCookie("refreshToken", options)
-    .json(
-        new ApiResponse(200, {}, "User logged out successfully")
-    )
+        .status(200)
+        .clearCookie("accessToken", options)
+        .clearCookie("refreshToken", options)
+        .json(
+            new ApiResponse(200, {}, "User logged out successfully")
+        )
 })
 
-export{ 
-    registerUser, 
+const refreshAccessToken = asyncHandler(async (req, res) => {
+
+
+    const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
+    if (!incomingRefreshToken) {
+        throw new ApiError(401, "Unauthorized request")
+    }
+
+    try {
+        const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET)
+    
+        const user = await User.findById(decodedToken._id)
+        if (!user) {
+            throw new ApiError(401, "Invalid refresh token")
+        }
+    
+        if (user.refreshToken !== incomingRefreshToken) {
+            throw new ApiError(401, "Refresh token is expired or used") 
+        }
+    
+        const options = {
+            httpOnly: true,
+            secure: true
+        }
+    
+        const {accessToken, newRefreshToken} = await generateAccessAndRefreshToken(user._id)
+    
+        return res
+            .status(200)
+            .cookie("accessToken", accessToken, options)
+            .cookie("refreshToken", refreshToken, options)
+            .json(
+                new ApiResponse(200, {accessToken, refreshToken: newRefreshToken}, "Access token refreshed successfully")
+            )
+    } catch (error) {
+        throw new ApiError(401, error?.message || "Invalid refresh token")
+        
+    }
+
+
+})
+
+export {
+    registerUser,
     loginUser,
-    logoutUser 
+    logoutUser,
+    refreshAccessToken
 }
