@@ -198,8 +198,11 @@ const logoutUser = asyncHandler(async (req, res) => {
     User.findByIdAndUpdate(
         await req.user._id, 
         {
-            $set: {
-                refreshToken: undefined
+            // $set: {     // what is difference between $set and $unset ? ans is $set is used to update the field and $unset is used to remove the field
+            //     refreshToken: undefined
+            // }
+            $unset: {
+                refreshToken: 1 //this remove the field from document
             }
         }, 
         {
