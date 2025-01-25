@@ -405,6 +405,11 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Username is missing")
     }
 
+    // Ensure req.user and req.user._id are defined
+    if (!req.user || !req.user._id) {
+        throw new ApiError(401, "Unauthorized");
+    }
+
     const channel = await User.aggregate([
         {
             $match:{
@@ -424,7 +429,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
                 from: "subscriptions",      // from the subscription model
                 localField: "_id",      // local field of the user
                 foreignField: "subscriber",    // foreign field of the subscription
-                as: "subcribedTo"    // store the result in subscribedTo, data like to whom this channel has subscribed
+                as: "subscribedTo"    // store the result in subscribedTo, data like to whom this channel has subscribed
             }
         },
         {
@@ -433,11 +438,11 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
                     $size: "$subscribers"
                 },
                 channelsSubscribedToCount:{
-                    $size: "$subcribedTo"
+                    $size: "$subscribedTo"
                 },
                 isSubscribed:{    // check if the logged in user is subscribed to this channel or not // the logic is to check if the logged in user is in the list of subscribers or not
                     $cond:{
-                        $if: {$in: [req.user?._id, "$subscribers.subscriber"]},
+                        if: {$in: [req.user?._id, "$subscribers.subscriber"]},
                         then: true,
                         else: false
                     }
